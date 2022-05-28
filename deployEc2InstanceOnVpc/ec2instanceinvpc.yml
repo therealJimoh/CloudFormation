@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Practice / Launching an EC2 in a Given Instance
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC used to deploy resources
+  PublicSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet to be used for the web server
+  AMItoUse:
+    Type: String
+    Description: AMI for base image
+Resources:
+  WebAccessSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      VpcId: vpc-0711f4fb9b8bde8cd
+      GroupDescription: Enable SSH access and aloow http to our test host
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+  WebServerInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref AMItoUse
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet:
+            - Ref: "WebAccessSecurityGroup"
+          SubnetId:
+            Ref: "PublicSubnet"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo yum update -y
+          sudo yum install -y httpd
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
