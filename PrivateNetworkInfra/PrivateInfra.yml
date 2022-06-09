@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  EnvironmentName:
+    Description: An environment that will prefixed to resources name
+    Type: String
+  VpcCIDR:
+    Description: An IP range for the VPC
+    Type: String
+    Default: 10.0.0.0/16
+  PrivateSubnet1CIDR:
+    Description: An IP range for the private subnet in the first availablity zone
+    Type: String
+    Default: 10.0.2.0/24
+  PrivateSubnet2CIDR:
+    Description: An IP range for the private subnet in the second availablity zone
+    Type: String
+    Default: 10.0.3.0/24
+  OnPremGateway:
+    Description: An IP address for the on premise VPC alliance
+    Type: String
+    Default: 1.2.3.4
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ1)
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Subnet (AZ2)
+  VPNGateway:
+    Type: AWS::EC2::VPNGateway
+    Properties:
+      Type: ipsec.1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Amazon-side Gateway
+  AttachVpcGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref  VPC
+      VpnGatewayId: !Ref VPNGateway
+  VPN:
+    Type: AWS::EC2::VPNConnection
+    Properties:
+      CustomerGatewayId: !Ref ONPREMCGateway
+      Type: ipsec.1
+      VpnGatewayId: !Ref  VPNGateway
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName} Private Route (AZ1)
+  DefaultPrivateRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: AttachVpcGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VPNGateway
+  PrivateSubnet1TableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName} Private Route (AZ2)
+  DefaultPrivateRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: AttachVpcGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VPNGateway
+  PrivateSubnet2TableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+  ONPREMCGateway:
+    Type: AWS::EC2::CustomerGateway
+    Properties:
+      BgpAsn: 65000
+      IpAddress: !Ref OnPremGateway
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} On Prem Gateway
+      Type: ipsec.1
+    
+Outputs:
+  VPC:
+    Description: A referenced to the created VPC
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${EnvironmentName}-VPCID
+  VpnGateway: 
+    Description: A refernece to the VPN Gateway
+    Value: !Ref VPNGateway
+    Export:
+      Name: !Sub ${EnvironmentName}-VPN-GTW-ID
+  AttachVpcGateway:
+    Description: A reference to the created VPC Gateway Attachement
+    Value: !Ref AttachVpcGateway
+    Export:
+      Name: !Sub ${EnvironmentName}-VPN-GTW-ATT-ID
+  ONPREMCGateway:
+    Description: A reference to the created Customer Gateway
+    Value: !Ref ONPREMCGateway
+    Export:
+      Name: !Sub ${EnvironmentName}-VPN-CUSTOMER-GTW-ID
+    
